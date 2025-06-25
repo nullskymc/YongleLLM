@@ -46,17 +46,53 @@
         </router-view>
       </div>
     </el-main>
+    
+    <!-- 缓存状态组件 -->
+    <CacheStatus :show="showCacheStatus" />
   </div>
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useNeo4jStore } from './stores/neo4j'
+import { ElMessage, ElLoading } from 'element-plus'
+import CacheStatus from './components/CacheStatus.vue'
 
 const neo4jStore = useNeo4jStore()
+const appLoading = ref(false)
+const showCacheStatus = ref(false) // 可以设为 true 来显示缓存状态
 
 onMounted(async () => {
-  await neo4jStore.init()
+  let loadingInstance = null
+  
+  try {
+    appLoading.value = true
+    loadingInstance = ElLoading.service({
+      lock: true,
+      text: '正在连接数据库并加载数据...',
+      background: 'rgba(0, 0, 0, 0.7)'
+    })
+
+    console.log('应用启动，初始化数据库连接...')
+    const success = await neo4jStore.init()
+    
+    if (success) {
+      ElMessage.success('数据加载完成')
+      console.log('缓存信息:', neo4jStore.getCacheInfo())
+    } else {
+      ElMessage.error('数据库连接失败')
+    }
+    
+  } catch (error) {
+    console.error('应用初始化失败:', error)
+    ElMessage.error('应用初始化失败')
+  } finally {
+    // 确保无论成功还是失败都关闭loading
+    if (loadingInstance) {
+      loadingInstance.close()
+    }
+    appLoading.value = false
+  }
 })
 </script>
 

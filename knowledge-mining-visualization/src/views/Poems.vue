@@ -292,14 +292,20 @@ const loadData = async () => {
   try {
     loading.value = true
     
-    // 确保数据库连接已建立
-    await neo4jStore.init()
+    // 等待全局初始化完成，然后直接从缓存获取数据
+    const initialized = await neo4jStore.waitForInitialization()
     
-    const result = await neo4jStore.getAllPoems()
-    poems.value = result
+    if (!initialized) {
+      throw new Error('初始化失败')
+    }
+
+    // 直接从缓存获取数据
+    poems.value = neo4jStore.cache.allPoems || []
+    
+    console.log('Poems数据加载完成，使用缓存，数量:', poems.value.length)
   } catch (error) {
     console.error('加载诗词数据失败:', error)
-    ElMessage.error('加载诗词数据失败')
+    ElMessage.error('加载诗词数据失败: ' + error.message)
   } finally {
     loading.value = false
   }

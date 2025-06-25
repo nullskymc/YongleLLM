@@ -1,11 +1,25 @@
 <template>
   <div class="dashboard">
     <div class="page-header">
-      <h2>
-        <el-icon><DataLine /></el-icon>
-        数据概览
-      </h2>
-      <p>湖泊知识挖掘系统总体统计信息</p>
+      <div class="header-content">
+        <div>
+          <h2>
+            <el-icon><DataLine /></el-icon>
+            数据概览
+          </h2>
+          <p>湖泊知识挖掘系统总体统计信息</p>
+        </div>
+        <div class="header-actions">
+          <el-button 
+            type="primary" 
+            :icon="Refresh" 
+            @click="refreshData"
+            :loading="loading"
+          >
+            刷新数据
+          </el-button>
+        </div>
+      </div>
     </div>
 
     <!-- 统计卡片 -->
@@ -94,6 +108,7 @@ import {
 import VChart from 'vue-echarts'
 import { useNeo4jStore } from '../stores/neo4j'
 import { ElMessage } from 'element-plus'
+import { DataLine, Location, Document, Edit, MapLocation, Refresh } from '@element-plus/icons-vue'
 
 use([
   CanvasRenderer,
@@ -277,22 +292,54 @@ const loadData = async () => {
   try {
     loading.value = true
     
-    // 确保数据库连接已建立
-    await neo4jStore.init()
+    // 等待全局初始化完成，然后直接从缓存获取数据
+    const initialized = await neo4jStore.waitForInitialization()
     
-    const [statsResult, lakesResult, locationsResult] = await Promise.all([
-      neo4jStore.getOverallStats(),
-      neo4jStore.getLakeStats(),
-      neo4jStore.getLocationDistribution()
-    ])
+    if (!initialized) {
+      throw new Error('初始化失败')
+    }
 
-    overallStats.value = statsResult
-    lakeStats.value = lakesResult
-    locationStats.value = locationsResult
+    // 直接从缓存获取数据，避免重复查询
+    overallStats.value = neo4jStore.cache.overallStats || {}
+    lakeStats.value = neo4jStore.cache.lakeStats || []
+    locationStats.value = neo4jStore.cache.locationDistribution || []
+
+    console.log('Dashboard数据加载完成，使用缓存:', {
+      stats: !!overallStats.value,
+      lakes: lakeStats.value.length,
+      locations: locationStats.value.length
+    })
 
   } catch (error) {
     console.error('加载数据失败:', error)
-    ElMessage.error('加载数据失败，请检查数据库连接')
+    ElMessage.error('加载数据失败: ' + error.message)
+  } finally {
+    loading.value = false
+  }
+}
+
+// 刷新数据的方法
+const refreshData = async () => {
+  try {
+    loading.value = true
+    ElMessage.info('正在刷新数据...')
+    
+    // 刷新所有数据
+    const success = await neo4jStore.refreshData()
+    
+    if (success) {
+      // 重新获取缓存数据
+      overallStats.value = neo4jStore.cache.overallStats || {}
+      lakeStats.value = neo4jStore.cache.lakeStats || []
+      locationStats.value = neo4jStore.cache.locationDistribution || []
+      
+      ElMessage.success('数据刷新完成')
+    } else {
+      ElMessage.error('数据刷新失败')
+    }
+  } catch (error) {
+    console.error('刷新数据失败:', error)
+    ElMessage.error('刷新数据失败: ' + error.message)
   } finally {
     loading.value = false
   }
@@ -312,6 +359,12 @@ onMounted(() => {
   margin-bottom: 32px;
 }
 
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
 .page-header h2 {
   display: flex;
   align-items: center;
@@ -324,6 +377,11 @@ onMounted(() => {
 .page-header p {
   color: #606266;
   font-size: 16px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
 }
 
 .stats-row {
