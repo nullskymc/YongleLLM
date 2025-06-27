@@ -34,6 +34,13 @@ export default defineConfig({
           'echarts': ['echarts', 'vue-echarts']
         }
       }
+    },
+    // 移除生产环境下的 console 和 debugger
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true
+      }
     }
   }
 })
